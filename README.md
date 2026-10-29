@@ -25,6 +25,14 @@ There are currently 14 supported languages for Visual Studio Code.
 |**Polish**|pl|Polish (pl-pl)
 |**Pseudo Language**|qps-ploc|Pseudo (qps-ploc)
 
+## This fork
+
+This repository is a fork of [microsoft/vscode-loc](https://github.com/microsoft/vscode-loc), the upstream home for VS Code language-pack resources. Translation strings are managed by Microsoft; this fork does not maintain a separate set of UI strings or contain the VS Code application source.
+
+For Simplified Chinese in VS Code, install the official [Chinese (Simplified) Language Pack](https://marketplace.visualstudio.com/items?itemName=MS-CEINTL.vscode-language-pack-zh-hans), then run **Configure Display Language** from the Command Palette and select Chinese (Simplified).
+
+The **Sync upstream** GitHub Actions workflow merges `microsoft/vscode-loc`'s `main` branch into this repository's default branch every day. It can also be started manually from the Actions tab. The workflow never force-pushes: merge conflicts or branch protection rules stop the run without replacing fork content; resolve them before retrying.
+
 ## Contributing
 
 If you want to give feedback or report an issue with a translation, please create a [new GitHub issue](https://github.com/microsoft/vscode-loc/issues/new). Please check if a topic about your issue already exists!

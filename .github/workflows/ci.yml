@@ -13,6 +13,16 @@ on:
   workflow_dispatch:
 
 jobs:
+  validate-workflows:
+    name: Validate workflow YAML
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Parse workflow YAML
+        run: ruby -e "require 'yaml'; ARGV.each { |file| YAML.parse_file(file) }" .github/workflows/*.yml
+
   determine-matrix:
     runs-on: ubuntu-latest
     outputs:
