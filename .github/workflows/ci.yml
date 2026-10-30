@@ -26,6 +26,9 @@ jobs:
       - name: Test incremental localization safety
         run: python3 -m unittest discover -s tools/localization -p 'test_*.py' -v
 
+      - name: Check isolated runtime harness syntax
+        run: node --check tools/localization/verify_runtime.cjs
+
   determine-matrix:
     runs-on: ubuntu-latest
     outputs:
