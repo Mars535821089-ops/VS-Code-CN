@@ -72,7 +72,55 @@ The verification output directory must be new; the generated audit directory mus
 
 Testing both orders proves that the last registered resource ID wins for the same locale; VS Code does not merge core strings from two language packs key by key. In the merged-last case, all 877 additions load and all 30,566 compiled messages match the selected resources or English fallback. In the baseline-last case, zero additions load. The 95 registered translation resource IDs are retained and parseable. Regional-locale fallback, absent-locale fallback, explicit English and cache reload are checked. The verifier also checks hashes of 103 application, official resource and current-user registration/configuration files before and after the test.
 
-**Consequently, do not install the supplement beside the official `zh-cn` pack in your normal profile.** Startup ordering could discard all additions or select a stale resource. Normal-profile deployment remains intentionally disabled until a stable, explicitly selected locale or another non-conflicting official mechanism is validated. Remaining missing strings still fall back to English; this project does not claim complete translation.
+**Do not install a second pack contributing the same `zh-cn` core resource.** Startup ordering could discard all additions or select a stale resource. Use the independent locale below instead. Remaining missing strings still fall back to English; this project does not claim complete translation.
+
+### Independent `zh-cn-mars` locale
+
+The independent extension `mars-localization.vscode-language-pack-zh-cn-mars` contributes **only `zh-cn-mars`**, not `zh-cn`. It contains all 95 official translation resources with the reviewed core additions. It is unsigned and local-only, does not use a Microsoft publisher identity, and leaves the official extension installed and unchanged.
+
+Generate and verify it after generating the audit above:
+
+```sh
+python3 tools/localization/custom_pack.py \
+  --app "/Applications/Visual Studio Code.app/Contents/Resources/app" \
+  --official-extension "$HOME/.vscode/extensions/ms-ceintl.vscode-language-pack-zh-hans-1.131.2026090407" \
+  --generated /tmp/vscode-zh-cn-audit \
+  --output /tmp/vscode-mars-package
+python3 tools/localization/verify_isolated.py \
+  --app "/Applications/Visual Studio Code.app/Contents/Resources/app" \
+  --official-extension "$HOME/.vscode/extensions/ms-ceintl.vscode-language-pack-zh-hans-1.131.2026090407" \
+  --generated /tmp/vscode-zh-cn-audit \
+  --custom-vsix /tmp/vscode-mars-package/mars-localization.vscode-language-pack-zh-cn-mars-0.1.0.vsix \
+  --output /tmp/vscode-mars-verification
+```
+
+In both installation orders, the installed registration/NLS implementations resolve `zh-cn-mars` to the custom resource and load all 877 additions. Both locales remain registered independently. If the custom registration is absent, `zh-cn-mars` falls back to `zh-cn`. Explicit startup locale selection is passed to NLS without the OS-language normalization that would otherwise collapse a Chinese variant. All official non-empty translations are preserved. Package generation checks the audit/build/input hashes, validates that the merged core is exactly the official baseline plus audited additions, and produces byte-identical VSIX output for identical inputs.
+
+This validation targets macOS and the core NLS/registered translation resources. Third-party extensions may implement their own locale matching or webview translations and may not recognize a custom locale; their UI is not guaranteed to change. Restore official `zh-cn` if such an extension regresses. No visual acceptance or cross-platform compatibility is claimed.
+
+The engine is deliberately pinned to **exactly 1.144.0**, not `^1.144.0`; later releases need a new build audit and compatibility review. VS Code's engine parser rejects compound ranges, so the exact version is used. Do not bypass compatibility checks when updating VS Code.
+
+After isolated verification succeeds, install the independent extension and configure the next startup:
+
+```sh
+code --install-extension /tmp/vscode-mars-package/mars-localization.vscode-language-pack-zh-cn-mars-0.1.0.vsix --do-not-sync
+python3 tools/localization/set_locale.py activate \
+  --backup "$HOME/.vscode/mars-startup-locale-backup.json"
+```
+
+`set_locale.py` changes only `locale` in `$HOME/.vscode/argv.json`, the startup configuration actually read by this VS Code build. It preserves comments and unrelated settings, refuses duplicate keys, and backs up only the prior locale's presence/value, not crash-report identifiers or other configuration. It does not restart VS Code. An existing backup is never overwritten; retain it across updates.
+
+**Installation is not immediate activation.** The CLI registers the extension but did not refresh `Code/languagepacks.json` in the observed build. After a normal user-initiated quit and relaunch, VS Code can scan the new extension and refresh that cache. If startup NLS resolution happened before the refreshed registration, that launch safely uses official `zh-cn`; a subsequent normal relaunch may be required. Verify that `languagepacks.json` has `zh-cn-mars` and its `vscode` path points to the independent extension, and that a compiled `clp` cache exists, before reporting the supplement active. Do not manually replace the user's registration cache or assume a window reload rereads startup arguments.
+
+Restore the previous startup locale without reverting unrelated settings:
+
+```sh
+python3 tools/localization/set_locale.py restore \
+  --backup "$HOME/.vscode/mars-startup-locale-backup.json"
+code --uninstall-extension mars-localization.vscode-language-pack-zh-cn-mars --do-not-sync
+```
+
+Restoration refuses to overwrite a locale the user changed after activation. If the previous configuration had no explicit locale, it removes only the added locale and returns to automatic language selection. To explicitly select official Simplified Chinese, use **Configure Display Language** and choose the official Chinese pack, or start a fresh VS Code process with `--locale=zh-cn`. No current window is closed or restarted by the scripts.
 
 ## Contributing
 

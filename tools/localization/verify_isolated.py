@@ -87,6 +87,7 @@ def main():
     parser.add_argument("--official-extension", type=Path, required=True)
     parser.add_argument("--generated", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="New directory for report and logs")
+    parser.add_argument("--custom-vsix", type=Path, help="Also test an independent zh-cn-mars package")
     args = parser.parse_args()
     try:
         app = args.app.resolve()
@@ -165,12 +166,39 @@ def main():
                                 "registered_extension_ids": sorted(actual_ids),
                                 "translation_resource_ids": len(pack["translations"]),
                                 "runtime": runtime})
+            custom_results = []
+            if args.custom_vsix:
+                for label, order in [("base-then-custom", ["base", "custom"]),
+                                     ("custom-then-base", ["custom", "base"])]:
+                    user_data, extensions = root / label / "user-data", root / label / "extensions"
+                    for index, kind in enumerate(order):
+                        vsix = args.custom_vsix if kind == "custom" else root / "base.vsix"
+                        run([str(app / "bin/code"), "--user-data-dir", str(user_data),
+                             "--extensions-dir", str(extensions), "--install-extension", str(vsix),
+                             "--force", "--do-not-sync"], env, output / f"{label}-{index}.log")
+                    raw = run(["node", str(Path(__file__).with_name("verify_runtime.cjs")),
+                               str(app), str(user_data), str(generated), str(extensions), "zh-cn-mars"],
+                              env, output / f"{label}-runtime.log")
+                    runtime = json.loads(raw)
+                    registry = read_json(user_data / "languagepacks.json")
+                    pack = registry["zh-cn-mars"]
+                    if len(pack["translations"]) != 95 or runtime["applied_loaded"] != report["summary"]["applied"]:
+                        raise ValueError("Custom locale did not retain full resources and additions")
+                    for resource in pack["translations"].values():
+                        if extensions.resolve() not in Path(resource).resolve().parents:
+                            raise ValueError("Custom locale resource outside isolated extensions")
+                        read_json(Path(resource))
+                    if not runtime["custom_locale_fallback_verified"]:
+                        raise ValueError("Custom locale fallback was not verified")
+                    custom_results.append({"installation_order": order, "runtime": runtime,
+                                           "translation_resource_ids": len(pack["translations"])})
         if {item["selected"] for item in results} != {"base", "merged"}:
             raise ValueError("Could not demonstrate both same-locale selection outcomes")
         if snapshot(app, official) != before:
             raise ValueError("Protected application, official translation or current-user registration changed")
         summary = {
             "build": report["build"], "cases": results,
+            "custom_locale_cases": custom_results,
             "same_locale_rule": "Last scanned translation resource ID wins; not a per-key merge.",
             "installed_for_current_user": False, "gui_verified": False,
             "temporary_extensions_removed": True,

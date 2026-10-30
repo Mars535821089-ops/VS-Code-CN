@@ -7,7 +7,7 @@ const crypto = require('node:crypto');
 const os = require('node:os');
 
 async function main() {
-  const [app, userData, generated, extensions] = process.argv.slice(2);
+  const [app, userData, generated, extensions, requestedLocale = 'zh-cn'] = process.argv.slice(2);
   assert.ok([app, userData, generated, extensions].every(Boolean), 'Four explicit paths required');
   const temporary = fs.realpathSync(os.tmpdir()) + path.sep;
   for (const candidate of [userData, extensions]) {
@@ -55,16 +55,16 @@ async function main() {
     Ce: () => {}, process: { env: {} }, console,
   }, { timeout: 5000 });
   const baseArgs = {
-    userLocale: 'zh-cn', osLocale: 'en', userDataPath: userData,
+    userLocale: requestedLocale, osLocale: 'en', userDataPath: userData,
     commit: product.commit, nlsMetadataHash: product.nlsMetadataHash,
     nlsMetadataPath: path.join(app, 'out'),
   };
   const resolved = await resolver(baseArgs);
-  assert.equal(resolved.resolvedLanguage, 'zh-cn');
+  assert.equal(resolved.resolvedLanguage, requestedLocale);
   const load = file => JSON.parse(fs.readFileSync(file, 'utf8'));
   const compiled = load(resolved.languagePack.messagesFile);
   const registry = load(path.join(userData, 'languagepacks.json'));
-  const selected = load(registry['zh-cn'].translations.vscode);
+  const selected = load(registry[requestedLocale].translations.vscode);
   const keys = load(path.join(app, 'out/nls.keys.json'));
   const english = load(path.join(app, 'out/nls.messages.json'));
   const audit = load(path.join(generated, 'audit.json'));
@@ -86,11 +86,34 @@ async function main() {
   }
   assert.equal(index, compiled.length);
   assert.equal(index, english.length);
-  assert.equal((await resolver({ ...baseArgs, userLocale: 'zh-cn-audit' })).resolvedLanguage, 'zh-cn');
+  assert.equal((await resolver({ ...baseArgs, userLocale: `${requestedLocale}-audit` })).resolvedLanguage, requestedLocale);
   assert.equal((await resolver({ ...baseArgs, userLocale: 'zz-audit' })).resolvedLanguage, 'en');
   assert.equal((await resolver({ ...baseArgs, userLocale: 'en' })).resolvedLanguage, 'en');
   // Cached reload must resolve to the same compiled messages.
   assert.equal((await resolver(baseArgs)).languagePack.messagesFile, resolved.languagePack.messagesFile);
+  let customLocaleFallbackVerified = false;
+  if (requestedLocale === 'zh-cn-mars') {
+    assert.ok(registry['zh-cn']);
+    const saved = fs.readFileSync(registryFile);
+    const withoutCustom = structuredClone(registry);
+    delete withoutCustom[requestedLocale];
+    fs.writeFileSync(registryFile, JSON.stringify(withoutCustom));
+    try {
+      assert.equal((await resolver(baseArgs)).resolvedLanguage, 'zh-cn');
+      customLocaleFallbackVerified = true;
+    } finally {
+      fs.writeFileSync(registryFile, saved);
+    }
+    // Explicit argv locale is passed directly to the NLS resolver; the OS
+    // language normalization path must not collapse our explicit choice.
+    const mainBundle = fs.readFileSync(path.join(app, 'out/mainImpl.js'), 'utf8');
+    const localeStart = mainBundle.indexOf('function Q3(i){');
+    const localeEnd = mainBundle.indexOf('\n', localeStart);
+    assert.ok(localeStart >= 0);
+    const pickLocale = vm.runInNewContext(
+      `${mainBundle.slice(localeStart, localeEnd)}; Q3`, { qr: {} }, { timeout: 5000 });
+    assert.equal(pickLocale({ locale: requestedLocale }), requestedLocale);
+  }
   console.log(JSON.stringify({
     runtime_occurrences_verified: index, applied_loaded: applied.size,
     english_fallback_occurrences: fallbacks,
@@ -102,6 +125,10 @@ async function main() {
     registration_input_order: installed.map(item => item.identifier.id),
     cli_created_registry: cliCreatedRegistry,
     registration_mode: 'Installed cache methods, using CLI-persisted extension manifest order; not GUI scanner verification.',
+    requested_locale: requestedLocale,
+    selected_core: registry[requestedLocale].translations.vscode,
+    registered_locales: Object.keys(registry),
+    custom_locale_fallback_verified: customLocaleFallbackVerified,
   }, null, 2));
 }
 
