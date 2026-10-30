@@ -23,6 +23,9 @@ jobs:
       - name: Parse workflow YAML
         run: ruby -e "require 'yaml'; ARGV.each { |file| YAML.parse_file(file) }" .github/workflows/*.yml
 
+      - name: Test incremental localization safety
+        run: python3 -m unittest discover -s tools/localization -p 'test_*.py' -v
+
   determine-matrix:
     runs-on: ubuntu-latest
     outputs:

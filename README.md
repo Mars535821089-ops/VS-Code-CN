@@ -27,11 +27,32 @@ There are currently 14 supported languages for Visual Studio Code.
 
 ## This fork
 
-This repository is a fork of [microsoft/vscode-loc](https://github.com/microsoft/vscode-loc), the upstream home for VS Code language-pack resources. Translation strings are managed by Microsoft; this fork does not maintain a separate set of UI strings or contain the VS Code application source.
+This repository is a fork of [microsoft/vscode-loc](https://github.com/microsoft/vscode-loc), the upstream home for VS Code language-pack resources. Translation strings under `i18n` are managed by Microsoft and preserved unchanged. This fork also contains an independent, non-installing incremental audit tool described below; it does not contain the VS Code application source.
 
 For Simplified Chinese in VS Code, install the official [Chinese (Simplified) Language Pack](https://marketplace.visualstudio.com/items?itemName=MS-CEINTL.vscode-language-pack-zh-hans), then run **Configure Display Language** from the Command Palette and select Chinese (Simplified).
 
 The **Sync upstream** GitHub Actions workflow merges `microsoft/vscode-loc`'s `main` branch into this repository's default branch every day. It can also be started manually from the Actions tab. The workflow never force-pushes: merge conflicts or branch protection rules stop the run without replacing fork content; resolve them before retrying.
+
+### Auditing newer VS Code builds
+
+The official language pack can be compatible with a newer VS Code release while still missing its new strings. The independent, reviewed supplement in `tools/localization/reviewed-zh-cn.json` is not a Microsoft release. It does not change the upstream `i18n` resources or the installed extension.
+
+On macOS, generate a reproducible audit and supplemental resources (Python 3, no dependencies):
+
+```sh
+python3 tools/localization/build_incremental.py \
+  --app "/Applications/Visual Studio Code.app/Contents/Resources/app" \
+  --output /tmp/vscode-zh-cn-audit
+python3 -m unittest discover -s tools/localization -p 'test_*.py' -v
+```
+
+The output directory must not already exist. `audit.json` contains the exact build, input hashes, every applied module/key with provenance, explicitly preserved names/format-only strings, and the complete remaining candidate list. Missing modules, missing keys, empty values, and unchanged official English are counted separately. Unchanged English is a review candidate, not proof of a defect (for example, keyboard names and product identifiers can remain English).
+
+`delta.json` contains only additions; `merged-main.i18n.json` preserves every existing non-empty official value. Automatic reuse requires the same key and exact English source, one unambiguous Chinese translation in the official resources, and matching formatting tokens. Reviewed entries match exact English sources; placeholders, code spans, links, tags, icon tokens, settings references, newlines and mnemonic markers are validated. New or ambiguous strings stay in the report rather than being machine-translated.
+
+These are **review artifacts, not an installed language pack**. No extension manifest or Microsoft publisher identity is generated. Do not copy them into VS Code's `out` directory or overwrite the official extension. Same-locale language-pack precedence and isolated extension loading have not been verified; installation is intentionally not automated. New build coverage requires rerunning the audit. Review the remaining module/key contexts before adding translations.
+
+On 2026-10-30, the audit of stable 1.144.0 (`2c33b50b16c472efe58357d1d2a8a5414bc23fbf`) against official pack `1.131.2026090407` found 30,566 runtime occurrences representing 30,514 distinct module/key pairs. The 212 reviewed dictionary entries and conservative official reuse produced **689 distinct supplemental translations** (672 reviewed, 17 reused). Another 198 candidates were preserved as exact names or format-only strings. **9,078 candidates remain for review**: 2,536 missing keys in existing modules, 4,068 keys in absent modules, and 2,474 unchanged official English values. These counts describe generated resources, not installed or visually verified coverage.
 
 ## Contributing
 
